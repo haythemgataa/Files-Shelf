@@ -19,9 +19,10 @@ import { dirname, basename } from "path";
 import { statSync } from "fs";
 import { ShelfItem } from "./lib/types";
 import { getShelfItems, removeFromShelf, clearShelf } from "./lib/shelf-storage";
-import { copyItems, moveItems, validateDestination } from "./lib/file-operations";
 import { getFileIcon, getFileCategory, getFileExtension, getCategoryIcon } from "./lib/file-icons";
 import RenameShelf from "./rename-shelf";
+import CopyToSelection from "./copy-to-selection";
+import MoveToSelection from "./move-to-selection";
 
 interface ShelfStats {
   totalItems: number;
@@ -173,104 +174,6 @@ export default function Command() {
     }
   };
 
-  const handleCopyToFinder = async () => {
-    if (items.length === 0) {
-      await showHUD("Shelf is empty");
-      return;
-    }
-
-    try {
-      const finderItems = await getSelectedFinderItems();
-      if (finderItems.length === 0) {
-        await showHUD("Please select a destination folder in Finder");
-        return;
-      }
-
-      const destination = finderItems[0].path;
-      const validation = validateDestination(destination);
-
-      if (!validation.valid) {
-        await showHUD(validation.error || "Invalid destination");
-        return;
-      }
-
-      const confirmed = await confirmAlert({
-        title: "Copy Items",
-        message: `Copy ${items.length} item${items.length > 1 ? "s" : ""} to:\n${destination}`,
-        primaryAction: {
-          title: "Copy",
-        },
-      });
-
-      if (confirmed) {
-        const results = copyItems(items, destination);
-        const successCount = results.filter((r) => r.success).length;
-        const failCount = results.filter((r) => !r.success).length;
-
-        if (failCount > 0) {
-          await showHUD(`Copied ${successCount} item${successCount !== 1 ? "s" : ""}, ${failCount} failed`);
-        } else {
-          await showHUD(`Copied ${successCount} item${successCount !== 1 ? "s" : ""}`);
-        }
-      }
-    } catch {
-      await showHUD("Please select a destination folder in Finder");
-    }
-  };
-
-  const handleMoveToFinder = async () => {
-    if (items.length === 0) {
-      await showHUD("Shelf is empty");
-      return;
-    }
-
-    try {
-      const finderItems = await getSelectedFinderItems();
-      if (finderItems.length === 0) {
-        await showHUD("Please select a destination folder in Finder");
-        return;
-      }
-
-      const destination = finderItems[0].path;
-      const validation = validateDestination(destination);
-
-      if (!validation.valid) {
-        await showHUD(validation.error || "Invalid destination");
-        return;
-      }
-
-      const confirmed = await confirmAlert({
-        title: "Move Items",
-        message: `Move ${items.length} item${items.length > 1 ? "s" : ""} to:\n${destination}\n\n⚠️ Files will be removed from their original locations.`,
-        primaryAction: {
-          title: "Move",
-          style: Alert.ActionStyle.Destructive,
-        },
-      });
-
-      if (confirmed) {
-        const results = moveItems(items, destination);
-        const successCount = results.filter((r) => r.success).length;
-        const failCount = results.filter((r) => !r.success).length;
-
-        // Clear shelf after successful move
-        if (successCount > 0) {
-          await clearShelf();
-          await loadItems();
-        }
-
-        if (failCount > 0) {
-          await showHUD(`Moved ${successCount} item${successCount !== 1 ? "s" : ""}, ${failCount} failed`);
-        } else {
-          await showHUD(`Moved ${successCount} item${successCount !== 1 ? "s" : ""}`);
-          await popToRoot();
-        }
-      }
-    } catch {
-      await showHUD("Please select a destination folder in Finder");
-    }
-  };
-
   const getItemActions = (item: ShelfItem) => (
     <ActionPanel>
       <ActionPanel.Section>
@@ -301,17 +204,17 @@ export default function Command() {
         />
       </ActionPanel.Section>
       <ActionPanel.Section title="Shelf Actions">
-        <Action
+        <Action.Push
           icon={Icon.CopyClipboard}
           title="Copy All to Finder Selection..."
           shortcut={{ modifiers: ["cmd", "shift"], key: "v" }}
-          onAction={handleCopyToFinder}
+          target={<CopyToSelection />}
         />
-        <Action
+        <Action.Push
           icon={Icon.ArrowRightCircle}
           title="Move All to Finder Selection..."
           shortcut={{ modifiers: ["cmd", "shift"], key: "m" }}
-          onAction={handleMoveToFinder}
+          target={<MoveToSelection />}
         />
         <Action.Push
           icon={Icon.Pencil}
