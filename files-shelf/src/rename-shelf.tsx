@@ -11,7 +11,8 @@ import {
 import { useState, useEffect } from "react";
 import { ShelfItem, RenameMode, RenameOptions, RenamePreview } from "./lib/types";
 import { generateRenamePreview, renameItems } from "./lib/file-operations";
-import { updateShelfItems, getShelfItems } from "./lib/shelf-storage";
+import { clearShelf, updateShelfItems, getShelfItems } from "./lib/shelf-storage";
+import { keepShelfAfterCompletion } from "./lib/preferences";
 
 interface RenameShelfProps {
   items?: ShelfItem[];
@@ -113,17 +114,24 @@ export default function RenameShelf({ items: propItems, onComplete }: RenameShel
     const successCount = results.filter((r) => r.success).length;
     const failCount = results.filter((r) => !r.success).length;
 
-    // Update shelf with new paths/names
-    const updatedItems = items.map((item, index) => {
-      const result = results[index];
-      if (result.success && result.newPath) {
-        const newName = previews[index].newName;
-        return { ...item, name: newName, path: result.newPath };
-      }
-      return item;
-    });
+    const fullySuccessful = failCount === 0;
 
-    await updateShelfItems(updatedItems);
+    if (fullySuccessful && !keepShelfAfterCompletion()) {
+      // By default, clear the shelf on a fully successful operation.
+      await clearShelf();
+    } else {
+      // Keep shelf, but update paths/names for successfully renamed items.
+      const updatedItems = items.map((item, index) => {
+        const result = results[index];
+        if (result.success && result.newPath) {
+          const newName = previews[index].newName;
+          return { ...item, name: newName, path: result.newPath };
+        }
+        return item;
+      });
+      await updateShelfItems(updatedItems);
+    }
+
     if (onComplete) {
       await onComplete();
     }

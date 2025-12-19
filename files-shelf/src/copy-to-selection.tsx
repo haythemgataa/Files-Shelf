@@ -8,9 +8,12 @@ import {
   popToRoot,
 } from "@raycast/api";
 import { useState, useEffect } from "react";
+import { existsSync } from "fs";
+import { join } from "path";
 import { ShelfItem } from "./lib/types";
-import { getShelfItems } from "./lib/shelf-storage";
-import { copyItems, validateDestination } from "./lib/file-operations";
+import { clearShelf, getShelfItems } from "./lib/shelf-storage";
+import { copyItems, validateDestination, ConflictStrategy } from "./lib/file-operations";
+import { keepShelfAfterCompletion } from "./lib/preferences";
 
 export default function Command() {
   const [items, setItems] = useState<ShelfItem[]>([]);
@@ -51,14 +54,30 @@ export default function Command() {
   const handleCopy = async () => {
     if (!destination || items.length === 0) return;
 
-    const results = copyItems(items, destination);
-    const successCount = results.filter((r) => r.success).length;
-    const failCount = results.filter((r) => !r.success).length;
+    // Default action when there are no conflicts.
+    return handleCopyWithStrategy("skip");
+  };
 
-    if (failCount > 0) {
-      await showHUD(`Copied ${successCount} item${successCount !== 1 ? "s" : ""}, ${failCount} failed`);
+  const handleCopyWithStrategy = async (onConflict: ConflictStrategy) => {
+    if (!destination || items.length === 0) return;
+
+    const results = copyItems(items, destination, { onConflict });
+    const successCount = results.filter((r) => r.success).length;
+    const skippedCount = results.filter((r) => r.skipped).length;
+    const failCount = results.filter((r) => !r.success && !r.skipped).length;
+
+    if (failCount > 0 || skippedCount > 0) {
+      const parts = [`Copied ${successCount} item${successCount !== 1 ? "s" : ""}`];
+      if (skippedCount > 0) parts.push(`${skippedCount} skipped`);
+      if (failCount > 0) parts.push(`${failCount} failed`);
+      await showHUD(parts.join(", "));
     } else {
       await showHUD(`Copied ${successCount} item${successCount !== 1 ? "s" : ""}`);
+    }
+
+    // By default, clear the shelf on a fully successful operation.
+    if (failCount === 0 && skippedCount === 0 && !keepShelfAfterCompletion()) {
+      await clearShelf();
     }
 
     await popToRoot();
@@ -92,6 +111,10 @@ export default function Command() {
     );
   }
 
+  const conflicts = destination
+    ? items.filter((item) => existsSync(join(destination, item.name)))
+    : [];
+
   return (
     <List
       navigationTitle="Confirm Copy"
@@ -101,14 +124,22 @@ export default function Command() {
         <List.Item
           icon={Icon.CheckCircle}
           title="Confirm Copy"
-          subtitle={`Copy ${items.length} item${items.length > 1 ? "s" : ""} to destination`}
+          subtitle={
+            conflicts.length > 0
+              ? `${conflicts.length} conflict${conflicts.length !== 1 ? "s" : ""} detected — choose what to do`
+              : `Copy ${items.length} item${items.length > 1 ? "s" : ""} to destination`
+          }
           actions={
             <ActionPanel>
-              <Action
-                icon={Icon.CopyClipboard}
-                title="Copy Items"
-                onAction={handleCopy}
-              />
+              {conflicts.length > 0 ? (
+                <>
+                  <Action icon={Icon.CopyClipboard} title="Copy (Skip Conflicts)" onAction={() => handleCopyWithStrategy("skip")} />
+                  <Action icon={Icon.Replace} title="Copy (Replace Conflicts)" onAction={() => handleCopyWithStrategy("replace")} />
+                  <Action icon={Icon.Pencil} title="Copy (Auto-Rename Conflicts)" onAction={() => handleCopyWithStrategy("rename")} />
+                </>
+              ) : (
+                <Action icon={Icon.CopyClipboard} title="Copy Items" onAction={handleCopy} />
+              )}
               <Action
                 icon={Icon.XMarkCircle}
                 title="Cancel"
@@ -119,6 +150,21 @@ export default function Command() {
           }
         />
       </List.Section>
+      {conflicts.length > 0 ? (
+        <List.Section title={`Conflicts (${conflicts.length})`}>
+          {conflicts.slice(0, 50).map((item) => (
+            <List.Item
+              key={`conflict-${item.id}`}
+              icon={Icon.Warning}
+              title={item.name}
+              subtitle="An item with the same name already exists in the destination"
+            />
+          ))}
+          {conflicts.length > 50 ? (
+            <List.Item icon={Icon.Ellipsis} title={`And ${conflicts.length - 50} more...`} />
+          ) : null}
+        </List.Section>
+      ) : null}
       <List.Section title="Items to Copy">
         {items.map((item) => (
           <List.Item

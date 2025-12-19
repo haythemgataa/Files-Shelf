@@ -1,4 +1,4 @@
-import { cpSync, renameSync, existsSync, statSync } from "fs";
+import { cpSync, renameSync, existsSync, statSync, rmSync } from "fs";
 import { basename, dirname, join, extname } from "path";
 import { ShelfItem, RenameOptions, RenamePreview } from "./types";
 
@@ -7,14 +7,68 @@ export interface OperationResult {
   item: ShelfItem;
   error?: string;
   newPath?: string;
+  skipped?: boolean;
 }
 
-export function copyItems(items: ShelfItem[], destination: string): OperationResult[] {
+export type ConflictStrategy = "skip" | "replace" | "rename";
+
+export interface BatchOperationOptions {
+  onConflict: ConflictStrategy;
+}
+
+function splitName(name: string): { base: string; ext: string } {
+  const ext = extname(name);
+  const base = ext ? basename(name, ext) : name;
+  return { base, ext };
+}
+
+function getAutoRenamedName(originalName: string, n: number): string {
+  const { base, ext } = splitName(originalName);
+  return `${base} (${n})${ext}`;
+}
+
+function getAvailableDestinationPath(destinationDir: string, desiredName: string): { destPath: string; finalName: string } {
+  const desiredPath = join(destinationDir, desiredName);
+  if (!existsSync(desiredPath)) return { destPath: desiredPath, finalName: desiredName };
+
+  for (let n = 1; n < 10_000; n++) {
+    const candidateName = getAutoRenamedName(desiredName, n);
+    const candidatePath = join(destinationDir, candidateName);
+    if (!existsSync(candidatePath)) return { destPath: candidatePath, finalName: candidateName };
+  }
+
+  // Extremely unlikely fallback: return original desired path (will error).
+  return { destPath: desiredPath, finalName: desiredName };
+}
+
+function removeIfExists(path: string) {
+  if (!existsSync(path)) return;
+  rmSync(path, { recursive: true, force: true });
+}
+
+export function copyItems(items: ShelfItem[], destination: string, options: BatchOperationOptions): OperationResult[] {
   const results: OperationResult[] = [];
 
   for (const item of items) {
     try {
-      const destPath = join(destination, item.name);
+      let destPath = join(destination, item.name);
+
+      if (existsSync(destPath)) {
+        if (options.onConflict === "skip") {
+          results.push({ success: false, skipped: true, item, error: "Destination already contains an item with the same name" });
+          continue;
+        }
+
+        if (options.onConflict === "replace") {
+          removeIfExists(destPath);
+        }
+
+        if (options.onConflict === "rename") {
+          const available = getAvailableDestinationPath(destination, item.name);
+          destPath = available.destPath;
+        }
+      }
+
       cpSync(item.path, destPath, { recursive: true });
       results.push({ success: true, item, newPath: destPath });
     } catch (error) {
@@ -29,13 +83,51 @@ export function copyItems(items: ShelfItem[], destination: string): OperationRes
   return results;
 }
 
-export function moveItems(items: ShelfItem[], destination: string): OperationResult[] {
+function moveWithFallback(src: string, dest: string) {
+  try {
+    renameSync(src, dest);
+    return;
+  } catch (error) {
+    // Cross-device move: fallback to copy + delete.
+    if (error && typeof error === "object" && "code" in error && (error as { code?: string }).code === "EXDEV") {
+      cpSync(src, dest, { recursive: true });
+      rmSync(src, { recursive: true, force: true });
+      return;
+    }
+    throw error;
+  }
+}
+
+export function moveItems(items: ShelfItem[], destination: string, options: BatchOperationOptions): OperationResult[] {
   const results: OperationResult[] = [];
 
   for (const item of items) {
     try {
-      const destPath = join(destination, item.name);
-      renameSync(item.path, destPath);
+      let destPath = join(destination, item.name);
+
+      // Moving an item onto itself is a no-op.
+      if (destPath === item.path) {
+        results.push({ success: false, skipped: true, item, error: "Item is already in the destination folder" });
+        continue;
+      }
+
+      if (existsSync(destPath)) {
+        if (options.onConflict === "skip") {
+          results.push({ success: false, skipped: true, item, error: "Destination already contains an item with the same name" });
+          continue;
+        }
+
+        if (options.onConflict === "replace") {
+          removeIfExists(destPath);
+        }
+
+        if (options.onConflict === "rename") {
+          const available = getAvailableDestinationPath(destination, item.name);
+          destPath = available.destPath;
+        }
+      }
+
+      moveWithFallback(item.path, destPath);
       results.push({ success: true, item, newPath: destPath });
     } catch (error) {
       results.push({
