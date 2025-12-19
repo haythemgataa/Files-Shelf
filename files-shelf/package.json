@@ -45,6 +45,17 @@
       "mode": "view"
     }
   ],
+  "preferences": [
+    {
+      "name": "keepShelfAfterCompletion",
+      "type": "checkbox",
+      "required": false,
+      "title": "Keep Shelf After Completion",
+      "label": "Keep shelf items after a successful copy/move/rename",
+      "default": false,
+      "description": "When disabled (default), the shelf is cleared after all items are successfully processed."
+    }
+  ],
   "dependencies": {
     "@raycast/api": "^1.103.10",
     "@raycast/utils": "^1.17.0"

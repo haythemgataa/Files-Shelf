@@ -9,10 +9,11 @@ import {
 } from "@raycast/api";
 import { useState, useEffect } from "react";
 import { existsSync } from "fs";
-import { join } from "path";
+import { basename, join } from "path";
 import { ShelfItem } from "./lib/types";
-import { getShelfItems, updateShelfItems } from "./lib/shelf-storage";
+import { clearShelf, getShelfItems, updateShelfItems } from "./lib/shelf-storage";
 import { moveItems, validateDestination, ConflictStrategy } from "./lib/file-operations";
+import { keepShelfAfterCompletion } from "./lib/preferences";
 
 export default function Command() {
   const [items, setItems] = useState<ShelfItem[]>([]);
@@ -65,11 +66,30 @@ export default function Command() {
     const skippedCount = results.filter((r) => r.skipped).length;
     const failCount = results.filter((r) => !r.success && !r.skipped).length;
 
-    // Remove successfully moved items; keep failed/skipped items on the shelf.
     if (successCount > 0) {
-      const movedIds = new Set(results.filter((r) => r.success).map((r) => r.item.id));
-      const remaining = items.filter((item) => !movedIds.has(item.id));
-      await updateShelfItems(remaining);
+      const movedPathsById = new Map<string, string>();
+      for (const r of results) {
+        if (r.success && r.newPath) movedPathsById.set(r.item.id, r.newPath);
+      }
+
+      const fullySuccessful = failCount === 0 && skippedCount === 0;
+
+      // By default, clear the shelf on a fully successful operation.
+      if (fullySuccessful && !keepShelfAfterCompletion()) {
+        await clearShelf();
+      } else if (keepShelfAfterCompletion()) {
+        // Keep items on shelf, but update moved items to their new paths/names.
+        const updated = items.map((item) => {
+          const newPath = movedPathsById.get(item.id);
+          if (!newPath) return item;
+          return { ...item, path: newPath, name: basename(newPath) };
+        });
+        await updateShelfItems(updated);
+      } else {
+        // Partial success: remove successfully moved items; keep failed/skipped items on the shelf.
+        const remaining = items.filter((item) => !movedPathsById.has(item.id));
+        await updateShelfItems(remaining);
+      }
     }
 
     if (failCount > 0 || skippedCount > 0) {
