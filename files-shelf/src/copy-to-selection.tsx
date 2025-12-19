@@ -11,8 +11,9 @@ import { useState, useEffect } from "react";
 import { existsSync } from "fs";
 import { join } from "path";
 import { ShelfItem } from "./lib/types";
-import { getShelfItems } from "./lib/shelf-storage";
+import { clearShelf, getShelfItems } from "./lib/shelf-storage";
 import { copyItems, validateDestination, ConflictStrategy } from "./lib/file-operations";
+import { keepShelfAfterCompletion } from "./lib/preferences";
 
 export default function Command() {
   const [items, setItems] = useState<ShelfItem[]>([]);
@@ -72,6 +73,11 @@ export default function Command() {
       await showHUD(parts.join(", "));
     } else {
       await showHUD(`Copied ${successCount} item${successCount !== 1 ? "s" : ""}`);
+    }
+
+    // By default, clear the shelf on a fully successful operation.
+    if (failCount === 0 && skippedCount === 0 && !keepShelfAfterCompletion()) {
+      await clearShelf();
     }
 
     await popToRoot();
