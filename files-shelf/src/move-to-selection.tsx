@@ -4,15 +4,18 @@ import {
   List,
   Icon,
   showHUD,
+  showToast,
+  Toast,
   getSelectedFinderItems,
   popToRoot,
+  Color,
 } from "@raycast/api";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { existsSync } from "fs";
 import { basename, join } from "path";
 import { ShelfItem } from "./lib/types";
 import { clearShelf, getShelfItems, updateShelfItems } from "./lib/shelf-storage";
-import { moveItems, validateDestination, ConflictStrategy } from "./lib/file-operations";
+import { moveItems, validateDestination, ConflictStrategy, validateSourceItems } from "./lib/file-operations";
 import { keepShelfAfterCompletion } from "./lib/preferences";
 
 export default function Command() {
@@ -20,14 +23,13 @@ export default function Command() {
   const [destination, setDestination] = useState<string | null>(null);
   const [destinationError, setDestinationError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [staleResolved, setStaleResolved] = useState(false);
 
   useEffect(() => {
     const load = async () => {
-      // Load shelf items
       const shelfItems = await getShelfItems();
       setItems(shelfItems);
 
-      // Get destination from Finder
       try {
         const finderItems = await getSelectedFinderItems();
         if (finderItems.length > 0) {
@@ -51,17 +53,23 @@ export default function Command() {
     load();
   }, []);
 
-  const handleMove = async () => {
-    if (!destination || items.length === 0) return;
-
-    // Default action when there are no conflicts.
-    return handleMoveWithStrategy("skip");
-  };
+  const validation = useMemo(() => validateSourceItems(items), [items]);
+  const staleItems = validation.stale;
 
   const handleMoveWithStrategy = async (onConflict: ConflictStrategy) => {
     if (!destination || items.length === 0) return;
 
-    const results = moveItems(items, destination, { onConflict });
+    const freshValidation = validateSourceItems(items);
+    if (freshValidation.hasIssues) {
+      await showToast({
+        style: Toast.Style.Failure,
+        title: "Some items are no longer available",
+        message: "Remove stale items from the shelf and try again.",
+      });
+      return;
+    }
+
+    const results = moveItems(freshValidation.valid, destination, { onConflict });
     const successCount = results.filter((r) => r.success).length;
     const skippedCount = results.filter((r) => r.skipped).length;
     const failCount = results.filter((r) => !r.success && !r.skipped).length;
@@ -74,11 +82,9 @@ export default function Command() {
 
       const fullySuccessful = failCount === 0 && skippedCount === 0;
 
-      // By default, clear the shelf on a fully successful operation.
       if (fullySuccessful && !keepShelfAfterCompletion()) {
         await clearShelf();
       } else if (keepShelfAfterCompletion()) {
-        // Keep items on shelf, but update moved items to their new paths/names.
         const updated = items.map((item) => {
           const newPath = movedPathsById.get(item.id);
           if (!newPath) return item;
@@ -86,7 +92,6 @@ export default function Command() {
         });
         await updateShelfItems(updated);
       } else {
-        // Partial success: remove successfully moved items; keep failed/skipped items on the shelf.
         const remaining = items.filter((item) => !movedPathsById.has(item.id));
         await updateShelfItems(remaining);
       }
@@ -132,10 +137,122 @@ export default function Command() {
     );
   }
 
+  if (validation.hasIssues && !staleResolved) {
+    return (
+      <List navigationTitle="Stale Items Found">
+        <List.Section title={`${staleItems.length} item${staleItems.length !== 1 ? "s" : ""} missing or inaccessible`}>
+          <List.Item
+            icon={Icon.Trash}
+            title="Remove Stale Items"
+            subtitle="Clean shelf and continue"
+            actions={
+              <ActionPanel>
+                <Action
+                  icon={Icon.Trash}
+                  title="Remove Stale Items"
+                  style={Action.Style.Destructive}
+                  onAction={async () => {
+                    await updateShelfItems(validation.valid);
+                    setItems(validation.valid);
+                    setStaleResolved(true);
+                    await showHUD("Removed stale items");
+                  }}
+                />
+              </ActionPanel>
+            }
+          />
+          <List.Item
+            icon={Icon.XMarkCircle}
+            title="Cancel"
+            subtitle="Go back without moving"
+            actions={
+              <ActionPanel>
+                <Action icon={Icon.XMarkCircle} title="Cancel" onAction={popToRoot} />
+              </ActionPanel>
+            }
+          />
+        </List.Section>
+        <List.Section title="Stale Items">
+          {staleItems.slice(0, 20).map((item) => (
+            <List.Item key={`stale-${item.id}`} icon={Icon.Warning} title={item.name} subtitle={item.path} />
+          ))}
+          {staleItems.length > 20 && <List.Item icon={Icon.Ellipsis} title={`And ${staleItems.length - 20} more...`} />}
+        </List.Section>
+      </List>
+    );
+  }
+
   const conflicts = destination
     ? items.filter((item) => existsSync(join(destination, item.name)))
     : [];
 
+  // Show conflict resolution screen if there are conflicts
+  if (conflicts.length > 0) {
+    return (
+      <List navigationTitle="Resolve Conflicts">
+        <List.Section title={`${conflicts.length} conflict${conflicts.length !== 1 ? "s" : ""} found`} subtitle={`Destination: ${destination}`}>
+          <List.Item
+            icon={{ source: Icon.Forward, tintColor: Color.Blue }}
+            title="Skip Conflicts"
+            subtitle="Keep existing files, only move non-conflicting items"
+            accessories={[{ text: `${items.length - conflicts.length} will move` }]}
+            actions={
+              <ActionPanel>
+                <Action icon={Icon.Forward} title="Skip Conflicts" style={Action.Style.Destructive} onAction={() => handleMoveWithStrategy("skip")} />
+              </ActionPanel>
+            }
+          />
+          <List.Item
+            icon={{ source: Icon.Replace, tintColor: Color.Orange }}
+            title="Replace Conflicts"
+            subtitle="Overwrite existing files with shelf items"
+            accessories={[{ text: `${items.length} will move` }]}
+            actions={
+              <ActionPanel>
+                <Action icon={Icon.Replace} title="Replace Conflicts" style={Action.Style.Destructive} onAction={() => handleMoveWithStrategy("replace")} />
+              </ActionPanel>
+            }
+          />
+          <List.Item
+            icon={{ source: Icon.PlusCircle, tintColor: Color.Green }}
+            title="Auto-Rename"
+            subtitle="Keep both and add a suffix (e.g., file (1).txt)"
+            accessories={[{ text: `${items.length} will move` }]}
+            actions={
+              <ActionPanel>
+                <Action icon={Icon.PlusCircle} title="Auto-Rename" style={Action.Style.Destructive} onAction={() => handleMoveWithStrategy("rename")} />
+              </ActionPanel>
+            }
+          />
+          <List.Item
+            icon={{ source: Icon.XMarkCircle, tintColor: Color.Red }}
+            title="Cancel"
+            subtitle="Go back without moving"
+            actions={
+              <ActionPanel>
+                <Action icon={Icon.XMarkCircle} title="Cancel" onAction={popToRoot} />
+              </ActionPanel>
+            }
+          />
+        </List.Section>
+        <List.Section title="Conflicting Items">
+          {conflicts.slice(0, 20).map((item) => (
+            <List.Item
+              key={`conflict-${item.id}`}
+              icon={Icon.Warning}
+              title={item.name}
+              subtitle={item.path}
+            />
+          ))}
+          {conflicts.length > 20 && (
+            <List.Item icon={Icon.Ellipsis} title={`And ${conflicts.length - 20} more...`} />
+          )}
+        </List.Section>
+      </List>
+    );
+  }
+
+  // No conflicts — show simple confirmation with warning
   return (
     <List
       navigationTitle="Confirm Move"
@@ -143,44 +260,17 @@ export default function Command() {
     >
       <List.Section title={`Destination: ${destination}`}>
         <List.Item
-          icon={Icon.ExclamationMark}
-          title="⚠️ Confirm Move"
-          subtitle={
-            conflicts.length > 0
-              ? `${conflicts.length} conflict${conflicts.length !== 1 ? "s" : ""} detected — choose what to do`
-              : "Files will be removed from their original locations"
-          }
+          icon={{ source: Icon.ExclamationMark, tintColor: Color.Orange }}
+          title="Confirm Move"
+          subtitle="Files will be removed from their original locations"
           actions={
             <ActionPanel>
-              {conflicts.length > 0 ? (
-                <>
-                  <Action
-                    icon={Icon.ArrowRightCircle}
-                    title="Move (Skip Conflicts)"
-                    style={Action.Style.Destructive}
-                    onAction={() => handleMoveWithStrategy("skip")}
-                  />
-                  <Action
-                    icon={Icon.Replace}
-                    title="Move (Replace Conflicts)"
-                    style={Action.Style.Destructive}
-                    onAction={() => handleMoveWithStrategy("replace")}
-                  />
-                  <Action
-                    icon={Icon.Pencil}
-                    title="Move (Auto-Rename Conflicts)"
-                    style={Action.Style.Destructive}
-                    onAction={() => handleMoveWithStrategy("rename")}
-                  />
-                </>
-              ) : (
-                <Action
-                  icon={Icon.ArrowRightCircle}
-                  title="Move Items"
-                  style={Action.Style.Destructive}
-                  onAction={handleMove}
-                />
-              )}
+              <Action
+                icon={Icon.ArrowRightCircle}
+                title="Move Items"
+                style={Action.Style.Destructive}
+                onAction={() => handleMoveWithStrategy("skip")}
+              />
               <Action
                 icon={Icon.XMarkCircle}
                 title="Cancel"
@@ -191,21 +281,6 @@ export default function Command() {
           }
         />
       </List.Section>
-      {conflicts.length > 0 ? (
-        <List.Section title={`Conflicts (${conflicts.length})`}>
-          {conflicts.slice(0, 50).map((item) => (
-            <List.Item
-              key={`conflict-${item.id}`}
-              icon={Icon.Warning}
-              title={item.name}
-              subtitle="An item with the same name already exists in the destination"
-            />
-          ))}
-          {conflicts.length > 50 ? (
-            <List.Item icon={Icon.Ellipsis} title={`And ${conflicts.length - 50} more...`} />
-          ) : null}
-        </List.Section>
-      ) : null}
       <List.Section title="Items to Move">
         {items.map((item) => (
           <List.Item
@@ -220,4 +295,3 @@ export default function Command() {
     </List>
   );
 }
-

@@ -4,15 +4,18 @@ import {
   List,
   Icon,
   showHUD,
+  showToast,
+  Toast,
   getSelectedFinderItems,
   popToRoot,
+  Color,
 } from "@raycast/api";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { existsSync } from "fs";
 import { join } from "path";
 import { ShelfItem } from "./lib/types";
-import { clearShelf, getShelfItems } from "./lib/shelf-storage";
-import { copyItems, validateDestination, ConflictStrategy } from "./lib/file-operations";
+import { clearShelf, getShelfItems, updateShelfItems } from "./lib/shelf-storage";
+import { copyItems, validateDestination, ConflictStrategy, validateSourceItems } from "./lib/file-operations";
 import { keepShelfAfterCompletion } from "./lib/preferences";
 
 export default function Command() {
@@ -20,14 +23,13 @@ export default function Command() {
   const [destination, setDestination] = useState<string | null>(null);
   const [destinationError, setDestinationError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [staleResolved, setStaleResolved] = useState(false);
 
   useEffect(() => {
     const load = async () => {
-      // Load shelf items
       const shelfItems = await getShelfItems();
       setItems(shelfItems);
 
-      // Get destination from Finder
       try {
         const finderItems = await getSelectedFinderItems();
         if (finderItems.length > 0) {
@@ -51,17 +53,23 @@ export default function Command() {
     load();
   }, []);
 
-  const handleCopy = async () => {
-    if (!destination || items.length === 0) return;
-
-    // Default action when there are no conflicts.
-    return handleCopyWithStrategy("skip");
-  };
+  const validation = useMemo(() => validateSourceItems(items), [items]);
+  const staleItems = validation.stale;
 
   const handleCopyWithStrategy = async (onConflict: ConflictStrategy) => {
     if (!destination || items.length === 0) return;
 
-    const results = copyItems(items, destination, { onConflict });
+    const freshValidation = validateSourceItems(items);
+    if (freshValidation.hasIssues) {
+      await showToast({
+        style: Toast.Style.Failure,
+        title: "Some items are no longer available",
+        message: "Remove stale items from the shelf and try again.",
+      });
+      return;
+    }
+
+    const results = copyItems(freshValidation.valid, destination, { onConflict });
     const successCount = results.filter((r) => r.success).length;
     const skippedCount = results.filter((r) => r.skipped).length;
     const failCount = results.filter((r) => !r.success && !r.skipped).length;
@@ -75,7 +83,6 @@ export default function Command() {
       await showHUD(`Copied ${successCount} item${successCount !== 1 ? "s" : ""}`);
     }
 
-    // By default, clear the shelf on a fully successful operation.
     if (failCount === 0 && skippedCount === 0 && !keepShelfAfterCompletion()) {
       await clearShelf();
     }
@@ -111,10 +118,121 @@ export default function Command() {
     );
   }
 
+  if (validation.hasIssues && !staleResolved) {
+    return (
+      <List navigationTitle="Stale Items Found">
+        <List.Section title={`${staleItems.length} item${staleItems.length !== 1 ? "s" : ""} missing or inaccessible`}>
+          <List.Item
+            icon={Icon.Trash}
+            title="Remove Stale Items"
+            subtitle="Clean shelf and continue"
+            actions={
+              <ActionPanel>
+                <Action
+                  icon={Icon.Trash}
+                  title="Remove Stale Items"
+                  style={Action.Style.Destructive}
+                  onAction={async () => {
+                    await updateShelfItems(validation.valid);
+                    setItems(validation.valid);
+                    setStaleResolved(true);
+                  }}
+                />
+              </ActionPanel>
+            }
+          />
+          <List.Item
+            icon={Icon.XMarkCircle}
+            title="Cancel"
+            subtitle="Go back without copying"
+            actions={
+              <ActionPanel>
+                <Action icon={Icon.XMarkCircle} title="Cancel" onAction={popToRoot} />
+              </ActionPanel>
+            }
+          />
+        </List.Section>
+        <List.Section title="Stale Items">
+          {staleItems.slice(0, 20).map((item) => (
+            <List.Item key={`stale-${item.id}`} icon={Icon.Warning} title={item.name} subtitle={item.path} />
+          ))}
+          {staleItems.length > 20 && <List.Item icon={Icon.Ellipsis} title={`And ${staleItems.length - 20} more...`} />}
+        </List.Section>
+      </List>
+    );
+  }
+
   const conflicts = destination
     ? items.filter((item) => existsSync(join(destination, item.name)))
     : [];
 
+  // Show conflict resolution screen if there are conflicts
+  if (conflicts.length > 0) {
+    return (
+      <List navigationTitle="Resolve Conflicts">
+        <List.Section title={`${conflicts.length} conflict${conflicts.length !== 1 ? "s" : ""} found`} subtitle={`Destination: ${destination}`}>
+          <List.Item
+            icon={{ source: Icon.Forward, tintColor: Color.Blue }}
+            title="Skip Conflicts"
+            subtitle="Keep existing files, only copy non-conflicting items"
+            accessories={[{ text: `${items.length - conflicts.length} will copy` }]}
+            actions={
+              <ActionPanel>
+                <Action icon={Icon.Forward} title="Skip Conflicts" onAction={() => handleCopyWithStrategy("skip")} />
+              </ActionPanel>
+            }
+          />
+          <List.Item
+            icon={{ source: Icon.Replace, tintColor: Color.Orange }}
+            title="Replace Conflicts"
+            subtitle="Overwrite existing files with shelf items"
+            accessories={[{ text: `${items.length} will copy` }]}
+            actions={
+              <ActionPanel>
+                <Action icon={Icon.Replace} title="Replace Conflicts" onAction={() => handleCopyWithStrategy("replace")} />
+              </ActionPanel>
+            }
+          />
+          <List.Item
+            icon={{ source: Icon.PlusCircle, tintColor: Color.Green }}
+            title="Auto-Rename"
+            subtitle="Keep both and add a suffix (e.g., file (1).txt)"
+            accessories={[{ text: `${items.length} will copy` }]}
+            actions={
+              <ActionPanel>
+                <Action icon={Icon.PlusCircle} title="Auto-Rename" onAction={() => handleCopyWithStrategy("rename")} />
+              </ActionPanel>
+            }
+          />
+          <List.Item
+            icon={{ source: Icon.XMarkCircle, tintColor: Color.Red }}
+            title="Cancel"
+            subtitle="Go back without copying"
+            actions={
+              <ActionPanel>
+                <Action icon={Icon.XMarkCircle} title="Cancel" onAction={popToRoot} />
+              </ActionPanel>
+            }
+          />
+        </List.Section>
+        <List.Section title="Conflicting Items">
+          {conflicts.slice(0, 20).map((item) => (
+            <List.Item
+              key={`conflict-${item.id}`}
+              icon={Icon.Warning}
+              title={item.name}
+              subtitle={item.path}
+            />
+          ))}
+          {conflicts.length > 20 && (
+            <List.Item icon={Icon.Ellipsis} title={`And ${conflicts.length - 20} more...`} />
+          )}
+        </List.Section>
+      </List>
+    );
+  }
+
+  // No conflicts — show simple confirmation
   return (
     <List
       navigationTitle="Confirm Copy"
@@ -124,22 +242,10 @@ export default function Command() {
         <List.Item
           icon={Icon.CheckCircle}
           title="Confirm Copy"
-          subtitle={
-            conflicts.length > 0
-              ? `${conflicts.length} conflict${conflicts.length !== 1 ? "s" : ""} detected — choose what to do`
-              : `Copy ${items.length} item${items.length > 1 ? "s" : ""} to destination`
-          }
+          subtitle={`Copy ${items.length} item${items.length > 1 ? "s" : ""} to destination`}
           actions={
             <ActionPanel>
-              {conflicts.length > 0 ? (
-                <>
-                  <Action icon={Icon.CopyClipboard} title="Copy (Skip Conflicts)" onAction={() => handleCopyWithStrategy("skip")} />
-                  <Action icon={Icon.Replace} title="Copy (Replace Conflicts)" onAction={() => handleCopyWithStrategy("replace")} />
-                  <Action icon={Icon.Pencil} title="Copy (Auto-Rename Conflicts)" onAction={() => handleCopyWithStrategy("rename")} />
-                </>
-              ) : (
-                <Action icon={Icon.CopyClipboard} title="Copy Items" onAction={handleCopy} />
-              )}
+              <Action icon={Icon.CopyClipboard} title="Copy Items" onAction={() => handleCopyWithStrategy("skip")} />
               <Action
                 icon={Icon.XMarkCircle}
                 title="Cancel"
@@ -150,21 +256,6 @@ export default function Command() {
           }
         />
       </List.Section>
-      {conflicts.length > 0 ? (
-        <List.Section title={`Conflicts (${conflicts.length})`}>
-          {conflicts.slice(0, 50).map((item) => (
-            <List.Item
-              key={`conflict-${item.id}`}
-              icon={Icon.Warning}
-              title={item.name}
-              subtitle="An item with the same name already exists in the destination"
-            />
-          ))}
-          {conflicts.length > 50 ? (
-            <List.Item icon={Icon.Ellipsis} title={`And ${conflicts.length - 50} more...`} />
-          ) : null}
-        </List.Section>
-      ) : null}
       <List.Section title="Items to Copy">
         {items.map((item) => (
           <List.Item
@@ -179,4 +270,3 @@ export default function Command() {
     </List>
   );
 }
-

@@ -1,6 +1,6 @@
 import { LocalStorage } from "@raycast/api";
-import { ShelfItem } from "./types";
-import { statSync } from "fs";
+import { ShelfItem, ShelfItemWithStatus } from "./types";
+import { statSync, existsSync } from "fs";
 import { basename } from "path";
 
 const SHELF_KEY = "shelf-items";
@@ -13,6 +13,35 @@ export async function getShelfItems(): Promise<ShelfItem[]> {
   } catch {
     return [];
   }
+}
+
+export function validateShelfItems(items: ShelfItem[]): ShelfItemWithStatus[] {
+  return items.map((item) => {
+    try {
+      statSync(item.path);
+      return { ...item, isStale: false };
+    } catch {
+      const staleReason = existsSync(item.path) ? "inaccessible" : "deleted";
+      return { ...item, isStale: true, staleReason };
+    }
+  });
+}
+
+export async function removeStaleItems(): Promise<number> {
+  const items = await getShelfItems();
+  const validItems = items.filter((item) => {
+    try {
+      statSync(item.path);
+      return true;
+    } catch {
+      return false;
+    }
+  });
+  const removedCount = items.length - validItems.length;
+  if (removedCount > 0) {
+    await LocalStorage.setItem(SHELF_KEY, JSON.stringify(validItems));
+  }
+  return removedCount;
 }
 
 export async function addToShelf(paths: string[]): Promise<{ added: number; duplicates: number }> {

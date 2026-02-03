@@ -17,8 +17,8 @@ import {
 import { useState, useEffect, useMemo } from "react";
 import { dirname, basename } from "path";
 import { statSync } from "fs";
-import { ShelfItem } from "./lib/types";
-import { getShelfItems, removeFromShelf, clearShelf } from "./lib/shelf-storage";
+import { ShelfItemWithStatus } from "./lib/types";
+import { getShelfItems, removeFromShelf, clearShelf, validateShelfItems, removeStaleItems } from "./lib/shelf-storage";
 import { getFileIcon, getFileCategory, getFileExtension, getCategoryIcon } from "./lib/file-icons";
 import RenameShelf from "./rename-shelf";
 import CopyToSelection from "./copy-to-selection";
@@ -51,7 +51,7 @@ function getFileSize(path: string): number {
   }
 }
 
-function computeStats(items: ShelfItem[]): ShelfStats {
+function computeStats(items: ShelfItemWithStatus[]): ShelfStats {
   const locations = new Set(items.map((item) => dirname(item.path)));
   const categoriesSet = new Set<string>();
   const extensionsSet = new Set<string>();
@@ -122,13 +122,13 @@ function ItemDetail({ stats }: { stats: ShelfStats }) {
 }
 
 export default function Command() {
-  const [items, setItems] = useState<ShelfItem[]>([]);
+  const [items, setItems] = useState<ShelfItemWithStatus[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isShowingDetail, setIsShowingDetail] = useState(false);
 
   const loadItems = async () => {
     const shelfItems = await getShelfItems();
-    setItems(shelfItems);
+    setItems(validateShelfItems(shelfItems));
     setIsLoading(false);
   };
 
@@ -138,7 +138,7 @@ export default function Command() {
 
   // Group items by parent folder
   const groupedItems = useMemo(() => {
-    const groups: Record<string, ShelfItem[]> = {};
+    const groups: Record<string, ShelfItemWithStatus[]> = {};
     for (const item of items) {
       const parent = dirname(item.path);
       if (!groups[parent]) groups[parent] = [];
@@ -150,6 +150,8 @@ export default function Command() {
 
   // Compute stats
   const stats = useMemo(() => computeStats(items), [items]);
+
+  const staleItems = useMemo(() => items.filter((item) => item.isStale), [items]);
 
   const handleRemove = async (id: string) => {
     await removeFromShelf(id);
@@ -174,7 +176,17 @@ export default function Command() {
     }
   };
 
-  const getItemActions = (item: ShelfItem) => (
+  const handleRemoveStale = async () => {
+    const removedCount = await removeStaleItems();
+    await loadItems();
+    if (removedCount > 0) {
+      await showToast({ style: Toast.Style.Success, title: `Removed ${removedCount} stale item${removedCount !== 1 ? "s" : ""}` });
+    } else {
+      await showToast({ style: Toast.Style.Success, title: "No stale items found" });
+    }
+  };
+
+  const getItemActions = (item: ShelfItemWithStatus) => (
     <ActionPanel>
       <ActionPanel.Section>
         <Action
@@ -222,6 +234,14 @@ export default function Command() {
           shortcut={{ modifiers: ["cmd", "shift"], key: "r" }}
           target={<RenameShelf items={items} onComplete={loadItems} />}
         />
+        {staleItems.length > 0 ? (
+          <Action
+            icon={Icon.Warning}
+            title={`Remove Stale Items (${staleItems.length})`}
+            style={Action.Style.Destructive}
+            onAction={handleRemoveStale}
+          />
+        ) : null}
         <Action
           icon={Icon.XMarkCircle}
           title="Clear Shelf"
@@ -251,15 +271,51 @@ export default function Command() {
       isShowingDetail={isShowingDetail}
       searchBarPlaceholder={`Search ${items.length} item${items.length !== 1 ? "s" : ""} on shelf...`}
     >
+      {staleItems.length > 0 ? (
+        <List.Section title="Stale Items Warning">
+          <List.Item
+            icon={{ source: Icon.Warning, tintColor: Color.Red }}
+            title={`You have ${staleItems.length} stale item${staleItems.length !== 1 ? "s" : ""} (moved or deleted)`}
+            subtitle="Press Enter to remove them from Shelf"
+            actions={
+              <ActionPanel>
+                <Action
+                  icon={Icon.Trash}
+                  title="Remove Stale Items"
+                  style={Action.Style.Destructive}
+                  onAction={handleRemoveStale}
+                />
+              </ActionPanel>
+            }
+          />
+        </List.Section>
+      ) : null}
       {groupedItems.map(([folderPath, folderItems]) => (
-        <List.Section key={folderPath} title={basename(folderPath)} subtitle={folderPath}>
+        <List.Section
+          key={folderPath}
+          title={basename(folderPath)}
+          subtitle={`${folderPath}${folderItems.some((item) => item.isStale) ? " • Stale items" : ""}`}
+        >
           {folderItems.map((item) => (
             <List.Item
               key={item.id}
-              icon={getFileIcon(item)}
+              icon={item.isStale ? { source: getFileIcon(item), tintColor: Color.Red } : getFileIcon(item)}
               title={item.name}
-              subtitle={isShowingDetail ? undefined : item.path}
-              accessories={isShowingDetail ? undefined : [{ text: getFileCategory(item) }]}
+              accessories={
+                isShowingDetail
+                  ? undefined
+                  : [
+                      ...(item.isStale
+                        ? [
+                            {
+                              icon: Icon.Warning,
+                              text: item.staleReason === "inaccessible" ? "Inaccessible" : "Missing",
+                            },
+                          ]
+                        : []),
+                      { text: getFileCategory(item) },
+                    ]
+              }
               detail={<ItemDetail stats={stats} />}
               actions={getItemActions(item)}
             />
