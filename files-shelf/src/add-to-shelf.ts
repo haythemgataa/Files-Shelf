@@ -16,7 +16,9 @@ export default async function main() {
     if (added === 0 && duplicates > 0) {
       await showHUD(`All ${duplicates} item${duplicates > 1 ? "s" : ""} already on shelf`);
     } else if (duplicates > 0) {
-      await showHUD(`Added ${added} item${added > 1 ? "s" : ""} to shelf (${duplicates} duplicate${duplicates > 1 ? "s" : ""} skipped)`);
+      await showHUD(
+        `Added ${added} item${added > 1 ? "s" : ""} to shelf (${duplicates} duplicate${duplicates > 1 ? "s" : ""} skipped)`,
+      );
     } else {
       await showHUD(`Added ${added} item${added > 1 ? "s" : ""} to shelf`);
     }

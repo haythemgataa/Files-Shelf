@@ -99,4 +99,3 @@ export async function updateShelfItem(id: string, updates: Partial<ShelfItem>): 
 export async function updateShelfItems(updatedItems: ShelfItem[]): Promise<void> {
   await LocalStorage.setItem(SHELF_KEY, JSON.stringify(updatedItems));
 }
-

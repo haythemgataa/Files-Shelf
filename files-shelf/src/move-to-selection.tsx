@@ -1,14 +1,4 @@
-import {
-  ActionPanel,
-  Action,
-  List,
-  Icon,
-  showHUD,
-  showToast,
-  Toast,
-  popToRoot,
-  Color,
-} from "@raycast/api";
+import { ActionPanel, Action, List, Icon, showHUD, showToast, Toast, popToRoot, Color } from "@raycast/api";
 import { useState, useEffect, useMemo } from "react";
 import { existsSync } from "fs";
 import { basename, join } from "path";
@@ -118,11 +108,7 @@ export default function Command() {
   if (destinationError) {
     return (
       <List>
-        <List.EmptyView
-          icon={Icon.Warning}
-          title="No Destination Selected"
-          description={destinationError}
-        />
+        <List.EmptyView icon={Icon.Warning} title="No Destination Selected" description={destinationError} />
       </List>
     );
   }
@@ -172,15 +158,16 @@ export default function Command() {
     );
   }
 
-  const conflicts = destination
-    ? items.filter((item) => existsSync(join(destination, item.name)))
-    : [];
+  const conflicts = destination ? items.filter((item) => existsSync(join(destination, item.name))) : [];
 
   // Show conflict resolution screen if there are conflicts
   if (conflicts.length > 0) {
     return (
       <List navigationTitle="Resolve Conflicts">
-        <List.Section title={`${conflicts.length} conflict${conflicts.length !== 1 ? "s" : ""} found`} subtitle={`Destination: ${destination}`}>
+        <List.Section
+          title={`${conflicts.length} conflict${conflicts.length !== 1 ? "s" : ""} found`}
+          subtitle={`Destination: ${destination}`}
+        >
           <List.Item
             icon={{ source: Icon.Forward, tintColor: Color.Blue }}
             title="Skip Conflicts"
@@ -188,7 +175,7 @@ export default function Command() {
             accessories={[{ text: `${items.length - conflicts.length} will move` }]}
             actions={
               <ActionPanel>
-                <Action icon={Icon.Forward} title="Skip Conflicts" style={Action.Style.Destructive} onAction={() => handleMoveWithStrategy("skip")} />
+                <Action icon={Icon.Forward} title="Skip Conflicts" onAction={() => handleMoveWithStrategy("skip")} />
               </ActionPanel>
             }
           />
@@ -199,7 +186,12 @@ export default function Command() {
             accessories={[{ text: `${items.length} will move` }]}
             actions={
               <ActionPanel>
-                <Action icon={Icon.Replace} title="Replace Conflicts" style={Action.Style.Destructive} onAction={() => handleMoveWithStrategy("replace")} />
+                <Action
+                  icon={Icon.Replace}
+                  title="Replace Conflicts"
+                  style={Action.Style.Destructive}
+                  onAction={() => handleMoveWithStrategy("replace")}
+                />
               </ActionPanel>
             }
           />
@@ -210,7 +202,7 @@ export default function Command() {
             accessories={[{ text: `${items.length} will move` }]}
             actions={
               <ActionPanel>
-                <Action icon={Icon.PlusCircle} title="Auto-Rename" style={Action.Style.Destructive} onAction={() => handleMoveWithStrategy("rename")} />
+                <Action icon={Icon.PlusCircle} title="Auto-Rename" onAction={() => handleMoveWithStrategy("rename")} />
               </ActionPanel>
             }
           />
@@ -227,16 +219,9 @@ export default function Command() {
         </List.Section>
         <List.Section title="Conflicting Items">
           {conflicts.slice(0, 20).map((item) => (
-            <List.Item
-              key={`conflict-${item.id}`}
-              icon={Icon.Warning}
-              title={item.name}
-              subtitle={item.path}
-            />
+            <List.Item key={`conflict-${item.id}`} icon={Icon.Warning} title={item.name} subtitle={item.path} />
           ))}
-          {conflicts.length > 20 && (
-            <List.Item icon={Icon.Ellipsis} title={`And ${conflicts.length - 20} more...`} />
-          )}
+          {conflicts.length > 20 && <List.Item icon={Icon.Ellipsis} title={`And ${conflicts.length - 20} more...`} />}
         </List.Section>
       </List>
     );

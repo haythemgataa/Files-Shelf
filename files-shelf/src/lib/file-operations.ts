@@ -35,7 +35,10 @@ function getAutoRenamedName(originalName: string, n: number): string {
   return `${base} (${n})${ext}`;
 }
 
-function getAvailableDestinationPath(destinationDir: string, desiredName: string): { destPath: string; finalName: string } {
+function getAvailableDestinationPath(
+  destinationDir: string,
+  desiredName: string,
+): { destPath: string; finalName: string } {
   const desiredPath = join(destinationDir, desiredName);
   if (!existsSync(desiredPath)) return { destPath: desiredPath, finalName: desiredName };
 
@@ -52,7 +55,7 @@ function getAvailableDestinationPath(destinationDir: string, desiredName: string
 function getAvailableDestinationPathWithReserved(
   destinationDir: string,
   desiredName: string,
-  reservedTargets: Set<string>
+  reservedTargets: Set<string>,
 ): { destPath: string; finalName: string } {
   const desiredPath = join(destinationDir, desiredName);
   if (!existsSync(desiredPath) && !reservedTargets.has(desiredPath)) {
@@ -100,7 +103,12 @@ export function copyItems(items: ShelfItem[], destination: string, options: Batc
 
       if (existsSync(destPath)) {
         if (options.onConflict === "skip") {
-          results.push({ success: false, skipped: true, item, error: "Destination already contains an item with the same name" });
+          results.push({
+            success: false,
+            skipped: true,
+            item,
+            error: "Destination already contains an item with the same name",
+          });
           continue;
         }
 
@@ -158,7 +166,12 @@ export function moveItems(items: ShelfItem[], destination: string, options: Batc
 
       if (existsSync(destPath)) {
         if (options.onConflict === "skip") {
-          results.push({ success: false, skipped: true, item, error: "Destination already contains an item with the same name" });
+          results.push({
+            success: false,
+            skipped: true,
+            item,
+            error: "Destination already contains an item with the same name",
+          });
           continue;
         }
 
@@ -188,21 +201,14 @@ export function moveItems(items: ShelfItem[], destination: string, options: Batc
 
 export function generateRenamePreview(
   items: ShelfItem[],
-  options: RenameOptions | ExpressionRenameOptions
+  options: RenameOptions | ExpressionRenameOptions,
 ): RenamePreview[] {
   const previews: RenamePreview[] = [];
 
   // Check if using new expression-based options
   if ("expression" in options) {
     items.forEach((item, index) => {
-      const newName = parseExpression(
-        options.expression,
-        item,
-        index,
-        items.length,
-        options.protectExtension !== false,
-        options.matchPattern
-      );
+      const newName = parseExpression(options.expression, item, index, items.length, options.matchPattern);
       const dir = dirname(item.path);
       previews.push({
         item,
@@ -258,9 +264,11 @@ export function generateRenamePreview(
 
 export function generateRenamePreviewWithConflicts(
   items: ShelfItem[],
-  options: RenameOptions | ExpressionRenameOptions
+  options: RenameOptions | ExpressionRenameOptions,
 ): RenamePreviewWithConflicts[] {
-  const previews: RenamePreviewWithConflicts[] = generateRenamePreview(items, options).map((preview) => ({ ...preview }));
+  const previews: RenamePreviewWithConflicts[] = generateRenamePreview(items, options).map((preview) => ({
+    ...preview,
+  }));
   const targetCounts = new Map<string, number>();
 
   for (const preview of previews) {
@@ -318,7 +326,11 @@ export function renameItems(previews: RenamePreview[], onConflict: ConflictStrat
         }
 
         if (onConflict === "rename") {
-          const available = getAvailableDestinationPathWithReserved(dirname(destPath), basename(destPath), reservedTargets);
+          const available = getAvailableDestinationPathWithReserved(
+            dirname(destPath),
+            basename(destPath),
+            reservedTargets,
+          );
           destPath = available.destPath;
         }
       }
@@ -354,4 +366,3 @@ export function validateDestination(path: string): { valid: boolean; error?: str
 
   return { valid: true };
 }
-

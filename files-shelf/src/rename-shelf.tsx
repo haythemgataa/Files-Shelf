@@ -1,17 +1,12 @@
-import {
-  ActionPanel,
-  Action,
-  List,
-  Form,
-  Icon,
-  showHUD,
-  popToRoot,
-  useNavigation,
-  Color,
-} from "@raycast/api";
+import { ActionPanel, Action, List, Form, Icon, showHUD, popToRoot, useNavigation, Color } from "@raycast/api";
 import { useState, useEffect, useMemo } from "react";
 import { ShelfItem, ExpressionRenameOptions, RenamePreview, RenamePreviewWithConflicts } from "./lib/types";
-import { generateRenamePreviewWithConflicts, renameItems, validateSourceItems, ConflictStrategy } from "./lib/file-operations";
+import {
+  generateRenamePreviewWithConflicts,
+  renameItems,
+  validateSourceItems,
+  ConflictStrategy,
+} from "./lib/file-operations";
 import { clearShelf, updateShelfItems, getShelfItems } from "./lib/shelf-storage";
 import { keepShelfAfterCompletion } from "./lib/preferences";
 
@@ -108,7 +103,12 @@ function RenameConflictResolution({
             accessories={[{ text: `${totalCount} will rename` }]}
             actions={
               <ActionPanel>
-                <Action icon={Icon.Replace} title="Replace Conflicts" onAction={() => onResolve("replace")} />
+                <Action
+                  icon={Icon.Replace}
+                  title="Replace Conflicts"
+                  style={Action.Style.Destructive}
+                  onAction={() => onResolve("replace")}
+                />
                 <Action icon={Icon.ArrowLeft} title="Go Back" onAction={onBack} />
               </ActionPanel>
             }
@@ -187,7 +187,7 @@ export default function RenameShelf({ items: propItems, onComplete }: RenameShel
       expression,
       matchPattern: matchPattern || undefined,
     }),
-    [expression, matchPattern]
+    [expression, matchPattern],
   );
 
   const validation = useMemo(() => validateSourceItems(items), [items]);
@@ -301,19 +301,12 @@ export default function RenameShelf({ items: propItems, onComplete }: RenameShel
           totalCount={previews.length}
           onResolve={handleConfirm}
           onBack={pop}
-        />
+        />,
       );
     } else {
-      push(
-        <RenameConfirmation
-          previews={previews}
-          onConfirm={() => handleConfirm("skip")}
-          onBack={pop}
-        />
-      );
+      push(<RenameConfirmation previews={previews} onConfirm={() => handleConfirm("skip")} onBack={pop} />);
     }
   };
-
 
   return (
     <Form
@@ -348,21 +341,12 @@ export default function RenameShelf({ items: propItems, onComplete }: RenameShel
       <Form.Separator />
 
       {previews.slice(0, 1).map((preview, index) => (
-        <Form.Description
-          key={index}
-          title={`Live Preview (${previews.length} items)`}
-          text={preview.newName}
-        />
+        <Form.Description key={index} title={`Live Preview (${previews.length} items)`} text={preview.newName} />
       ))}
       {previews.slice(1, 20).map((preview, index) => (
-        <Form.Description
-          key={index}
-          text={preview.newName}
-        />
+        <Form.Description key={index} text={preview.newName} />
       ))}
-      {previews.length > 20 && (
-        <Form.Description title="" text={`... and ${previews.length - 20} more items`} />
-      )}
+      {previews.length > 20 && <Form.Description title="" text={`... and ${previews.length - 20} more items`} />}
     </Form>
   );
 }

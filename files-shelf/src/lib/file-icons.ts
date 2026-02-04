@@ -11,7 +11,26 @@ const textDocExtensions = new Set(["doc", "docx", "odt", "rtf"]);
 const spreadsheetExtensions = new Set(["xls", "xlsx", "csv", "ods"]);
 const presentationExtensions = new Set(["ppt", "pptx", "odp", "key"]);
 const archiveExtensions = new Set(["zip", "rar", "7z", "tar", "gz", "bz2", "xz", "dmg"]);
-const codeExtensions = new Set(["js", "ts", "jsx", "tsx", "py", "rb", "go", "rs", "java", "c", "cpp", "h", "swift", "kt", "php", "sh", "bash", "zsh"]);
+const codeExtensions = new Set([
+  "js",
+  "ts",
+  "jsx",
+  "tsx",
+  "py",
+  "rb",
+  "go",
+  "rs",
+  "java",
+  "c",
+  "cpp",
+  "h",
+  "swift",
+  "kt",
+  "php",
+  "sh",
+  "bash",
+  "zsh",
+]);
 const dataExtensions = new Set(["json", "yaml", "yml", "xml", "toml", "ini", "env"]);
 const textExtensions = new Set(["md", "txt", "log", "readme"]);
 

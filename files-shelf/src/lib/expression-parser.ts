@@ -34,17 +34,17 @@ function formatDate(format: string, date?: Date): string {
   const dayNamesFull = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
   let result = format;
-  
+
   // Year (case insensitive, order matters - check longer patterns first)
   result = result.replace(/yyyy/gi, String(year));
   result = result.replace(/yy/gi, String(year).slice(-2));
-  
+
   // Month (case insensitive, order matters - check longer patterns first)
   result = result.replace(/mmmm/gi, monthNamesFull[month - 1]);
   result = result.replace(/mmm/gi, monthNames[month - 1]);
   result = result.replace(/mm/gi, String(month).padStart(2, "0"));
   result = result.replace(/\bm\b/gi, String(month));
-  
+
   // Day of week and day of month (case insensitive, order matters - check longer patterns first)
   // Replace longest patterns first to avoid partial matches
   result = result.replace(/dddd/gi, dayNamesFull[dayOfWeek]);
@@ -123,8 +123,7 @@ export function parseExpression(
   item: ShelfItem,
   index: number,
   total: number,
-  protectExtension: boolean = true,
-  matchPattern?: string
+  matchPattern?: string,
 ): string {
   if (!expression) {
     return item.name;
@@ -208,9 +207,9 @@ export function parseExpression(
   // If matchPattern is provided, apply expression only to matched portions
   if (matchPattern && matchPattern.trim()) {
     // Find all occurrences of the match pattern in the filename
-    const matchRegex = new RegExp(matchPattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+    const matchRegex = new RegExp(matchPattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
     const matches = [...workingName.matchAll(matchRegex)];
-    
+
     if (matches.length > 0) {
       let result = workingName;
       // Process matches in reverse order to maintain correct indices
@@ -219,7 +218,7 @@ export function parseExpression(
         const matchedText = matchInfo[0];
         const matchedStart = matchInfo.index!;
         const matchedEnd = matchedStart + matchedText.length;
-        
+
         // Apply expression to the matched portion
         const expressionResult = processExpression(normalizedExpression);
         // Replace the matched portion with the expression result
@@ -243,21 +242,12 @@ export function parseExpression(
     workingName = item.name;
   }
 
-  if (protectExtension && ext) {
-    const resultExt = extname(workingName);
-    // If result doesn't have the original extension, append it
-    if (resultExt !== ext) {
-      // Check if result already has an extension (different one)
-      if (resultExt) {
-        // Replace the extension
-        workingName = workingName.slice(0, -resultExt.length) + ext;
-      } else {
-        // No extension in result, append the original
-        workingName = workingName + ext;
-      }
+  if (ext) {
+    // Always preserve the original extension without stripping dotted names.
+    if (!workingName.endsWith(ext)) {
+      workingName = workingName + ext;
     }
   }
 
   return workingName;
 }
-

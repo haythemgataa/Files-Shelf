@@ -24,7 +24,6 @@ export interface RenameOptions {
 
 export interface ExpressionRenameOptions {
   expression: string;
-  protectExtension?: boolean;
   matchPattern?: string;
 }
 
@@ -45,4 +44,3 @@ export interface ValidationResult {
   stale: ShelfItem[];
   hasIssues: boolean;
 }
-

@@ -8,4 +8,3 @@ export function keepShelfAfterCompletion(): boolean {
   const prefs = getPreferenceValues<ExtensionPreferences>();
   return Boolean(prefs.keepShelfAfterCompletion);
 }
-

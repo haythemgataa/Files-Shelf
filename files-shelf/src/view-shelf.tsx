@@ -8,9 +8,6 @@ import {
   showToast,
   Toast,
   Clipboard,
-  showHUD,
-  getSelectedFinderItems,
-  popToRoot,
   Detail,
   Color,
 } from "@raycast/api";
@@ -106,7 +103,12 @@ function ItemDetail({ stats }: { stats: ShelfStats }) {
           <Detail.Metadata.Separator />
           <Detail.Metadata.TagList title="Categories">
             {stats.categories.map((category) => (
-              <Detail.Metadata.TagList.Item key={category} text={category} icon={getCategoryIcon(category)} color={Color.Blue} />
+              <Detail.Metadata.TagList.Item
+                key={category}
+                text={category}
+                icon={getCategoryIcon(category)}
+                color={Color.Blue}
+              />
             ))}
           </Detail.Metadata.TagList>
           <Detail.Metadata.Separator />
@@ -180,7 +182,10 @@ export default function Command() {
     const removedCount = await removeStaleItems();
     await loadItems();
     if (removedCount > 0) {
-      await showToast({ style: Toast.Style.Success, title: `Removed ${removedCount} stale item${removedCount !== 1 ? "s" : ""}` });
+      await showToast({
+        style: Toast.Style.Success,
+        title: `Removed ${removedCount} stale item${removedCount !== 1 ? "s" : ""}`,
+      });
     } else {
       await showToast({ style: Toast.Style.Success, title: "No stale items found" });
     }
@@ -218,19 +223,19 @@ export default function Command() {
       <ActionPanel.Section title="Shelf Actions">
         <Action.Push
           icon={Icon.CopyClipboard}
-          title="Copy All to Finder Selection..."
+          title="Copy All to Finder Selection…"
           shortcut={{ modifiers: ["cmd", "shift"], key: "v" }}
           target={<CopyToSelection />}
         />
         <Action.Push
           icon={Icon.ArrowRightCircle}
-          title="Move All to Finder Selection..."
+          title="Move All to Finder Selection…"
           shortcut={{ modifiers: ["cmd", "shift"], key: "m" }}
           target={<MoveToSelection />}
         />
         <Action.Push
           icon={Icon.Pencil}
-          title="Rename All..."
+          title="Rename All…"
           shortcut={{ modifiers: ["cmd", "shift"], key: "r" }}
           target={<RenameShelf items={items} onComplete={loadItems} />}
         />
