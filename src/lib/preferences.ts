@@ -1,10 +1,6 @@
 import { getPreferenceValues } from "@raycast/api";
 
-export interface ExtensionPreferences {
-  keepShelfAfterCompletion?: boolean;
-}
-
 export function keepShelfAfterCompletion(): boolean {
-  const prefs = getPreferenceValues<ExtensionPreferences>();
+  const prefs = getPreferenceValues();
   return Boolean(prefs.keepShelfAfterCompletion);
 }
