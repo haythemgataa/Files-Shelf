@@ -6,7 +6,6 @@ import {
   showHUD,
   showToast,
   Toast,
-  getSelectedFinderItems,
   popToRoot,
   Color,
 } from "@raycast/api";
@@ -15,8 +14,9 @@ import { existsSync } from "fs";
 import { basename, join } from "path";
 import { ShelfItem } from "./lib/types";
 import { clearShelf, getShelfItems, updateShelfItems } from "./lib/shelf-storage";
-import { moveItems, validateDestination, ConflictStrategy, validateSourceItems } from "./lib/file-operations";
+import { moveItems, ConflictStrategy, validateSourceItems } from "./lib/file-operations";
 import { keepShelfAfterCompletion } from "./lib/preferences";
+import { getFinderDestination } from "./lib/finder-destination";
 
 export default function Command() {
   const [items, setItems] = useState<ShelfItem[]>([]);
@@ -30,21 +30,11 @@ export default function Command() {
       const shelfItems = await getShelfItems();
       setItems(shelfItems);
 
-      try {
-        const finderItems = await getSelectedFinderItems();
-        if (finderItems.length > 0) {
-          const destPath = finderItems[0].path;
-          const validation = validateDestination(destPath);
-          if (validation.valid) {
-            setDestination(destPath);
-          } else {
-            setDestinationError(validation.error || "Invalid destination");
-          }
-        } else {
-          setDestinationError("No folder selected in Finder");
-        }
-      } catch {
-        setDestinationError("Please select a folder in Finder");
+      const destinationResult = await getFinderDestination();
+      if ("path" in destinationResult) {
+        setDestination(destinationResult.path);
+      } else {
+        setDestinationError(destinationResult.error);
       }
 
       setIsLoading(false);

@@ -28,14 +28,14 @@
     },
     {
       "name": "copy-to-selection",
-      "title": "Copy Shelf to Finder Selection",
-      "description": "Copy all shelf items to the folder selected in Finder",
+      "title": "Copy Shelf to Open or Selected Folder",
+      "description": "Copy all shelf items to the open Finder folder or a selected folder",
       "mode": "view"
     },
     {
       "name": "move-to-selection",
-      "title": "Move Shelf to Finder Selection",
-      "description": "Move all shelf items to the folder selected in Finder",
+      "title": "Move Shelf to Open or Selected Folder",
+      "description": "Move all shelf items to the open Finder folder or a selected folder",
       "mode": "view"
     },
     {
