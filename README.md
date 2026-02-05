@@ -1,12 +1,13 @@
-# Files Shelf
-
 <p align="center">
   <img src="assets/files-shelf-icon.png" alt="Files Shelf" width="128" />
+  <h1 align="center">Files Shelf</h1></p>
+<p align="center">
+  <img alt="Static Badge" src="https://img.shields.io/badge/Raycast-Extension-orange?style=flat&logo=raycast&logoColor=white&labelColor=gray&color=%23FF6363">
 </p>
 
 **Batch move, copy, or rename files and folders from different directories.**
 
-A Raycast extension that lets you collect files and folders from anywhere on your Mac into a virtual "shelf," then run batch actions: copy all to a folder, move all, or rename with prefix, suffix, numbering, or find/replace. Handles conflicts and works across volumes.
+A [Raycast extension](https://www.raycast.com/haythem_gataa/files-shelf) that lets you collect files and folders from anywhere on your Mac into a virtual "shelf," then run batch actions: copy all to a folder, move all, or rename with prefix, suffix, numbering, or find/replace. Handles conflicts and works across volumes.
 
 ---
 
@@ -24,11 +25,18 @@ A Raycast extension that lets you collect files and folders from anywhere on you
 
 ## Requirements
 
-- **macOS** (Raycast with Finder integration)
-- Select files/folders in Finder, or have a Finder window open, when using Add to Shelf or Copy/Move to Folder
+- [Raycast](https://www.raycast.com/) on macOS
 
 ---
 
+## How To
+
+- Select files/folders in Finder from a single or multiple directories
+- Use command **Add to Shelf**
+- Pick an operation using one of these commands: **Copy Shelf to Folder** / **Move Shelf to Folder** / **Rename Shelf Items**
+- Shelf get cleared by default after completion
+
+---
 ## Preference
 
 - **Keep Shelf After Completion** — When off (default), the shelf is cleared after a successful copy, move, or rename. When on, items stay on the shelf.
